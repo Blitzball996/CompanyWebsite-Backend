@@ -3,7 +3,7 @@
 *.log
 /tmp/
 /bin/
-server
+/server
 analytics-server
 pgdata/
 
