@@ -1,0 +1,56 @@
+# Production stack: Postgres + Go backend + Caddy (auto HTTPS).
+# Only Caddy is exposed to the public internet (ports 80/443).
+# Postgres and the Go server have NO public ports — they talk over the internal
+# Docker network only. Run with:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# Required env (put in a .env file next to this one — see deploy/.env.example):
+#   SITE_DOMAIN, DASHBOARD_PASS, VISITOR_SALT   (DB_PASSWORD/STORE_IP optional)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-analytics}
+      POSTGRES_DB: analytics
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 8090
+      DATABASE_URL: postgres://analytics:${DB_PASSWORD:-analytics}@db:5432/analytics?sslmode=disable
+      ALLOWED_ORIGINS: https://${SITE_DOMAIN}
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASS: ${DASHBOARD_PASS:?set DASHBOARD_PASS in .env}
+      VISITOR_SALT: ${VISITOR_SALT:?set VISITOR_SALT in .env}
+      STORE_IP: ${STORE_IP:-true}
+      GEO_DB_PATH: internal/geo/data/ip2region.xdb
+    # NOTE: intentionally no "ports:" — not reachable from the public internet.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../CompanyWebsite:/srv:ro        # the frontend repo, cloned as a sibling dir
+      - ./caddy_data:/data               # persisted TLS certificates
+      - ./caddy_config:/config

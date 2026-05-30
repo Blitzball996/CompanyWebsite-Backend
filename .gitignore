@@ -6,3 +6,8 @@
 server
 analytics-server
 pgdata/
+
+# production runtime (do not commit)
+caddy_data/
+caddy_config/
+CompanyWebsite/
