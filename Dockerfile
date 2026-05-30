@@ -12,6 +12,7 @@ WORKDIR /app
 COPY --from=build /out/server /app/server
 COPY internal/db/migrations /app/internal/db/migrations
 COPY internal/dashboard/templates /app/internal/dashboard/templates
+COPY internal/geo/data /app/internal/geo/data
 COPY web /app/web
 EXPOSE 8090
 CMD ["/app/server"]

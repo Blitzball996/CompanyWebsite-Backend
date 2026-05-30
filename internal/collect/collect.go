@@ -8,18 +8,20 @@ import (
 	"strings"
 	"time"
 
+	"blitzball-analytics/internal/geo"
 	"blitzball-analytics/internal/middleware"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Handler struct {
-	pool *pgxpool.Pool
-	salt string
+	pool    *pgxpool.Pool
+	salt    string
+	storeIP bool
 }
 
-func New(pool *pgxpool.Pool, salt string) *Handler {
-	return &Handler{pool: pool, salt: salt}
+func New(pool *pgxpool.Pool, salt string, storeIP bool) *Handler {
+	return &Handler{pool: pool, salt: salt, storeIP: storeIP}
 }
 
 // payload is what analytics.js POSTs.
@@ -66,18 +68,32 @@ func (h *Handler) Collect(w http.ResponseWriter, r *http.Request) {
 		metaJSON, _ = json.Marshal(p.Meta)
 	}
 
+	// Geolocation from IP (offline ip2region, reliable to city level).
+	loc := geo.Lookup(ip)
+
+	// storeIP controls whether the raw IP is persisted (privacy toggle, see config).
+	var ipToStore interface{}
+	if h.storeIP {
+		ipToStore = nullStr(ip)
+	} else {
+		ipToStore = nil
+	}
+
 	ctx := r.Context()
 	_, err := h.pool.Exec(ctx, `
 		INSERT INTO events
 		  (type, name, visitor_id, session_id, page, title, referrer,
 		   utm_source, utm_medium, utm_campaign, country, device, browser, os,
-		   lang, screen, duration_ms, scroll_pct, meta, created_at)
+		   lang, screen, duration_ms, scroll_pct, meta, created_at,
+		   ip, province, city, isp)
 		VALUES
-		  ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+		  ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+		   $21,$22,$23,$24)`,
 		p.Type, nullStr(p.Name), visitorID, p.SessionID, p.Page, nullStr(p.Title),
 		nullStr(p.Referrer), nullStr(p.UTMSource), nullStr(p.UTMMedium), nullStr(p.UTMCampaign),
-		"", device, browser, os, nullStr(p.Lang), nullStr(p.Screen),
+		nullStr(loc.Country), device, browser, os, nullStr(p.Lang), nullStr(p.Screen),
 		p.DurationMs, p.ScrollPct, metaJSON, time.Now(),
+		ipToStore, nullStr(loc.Province), nullStr(loc.City), nullStr(loc.ISP),
 	)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)

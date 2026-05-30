@@ -27,5 +27,7 @@ services:
       DASHBOARD_USER: ${DASHBOARD_USER:-admin}
       DASHBOARD_PASS: ${DASHBOARD_PASS:-change-me-please}
       VISITOR_SALT: ${VISITOR_SALT:-please-change-this-random-salt}
+      STORE_IP: ${STORE_IP:-true}
+      GEO_DB_PATH: ${GEO_DB_PATH:-internal/geo/data/ip2region.xdb}
     ports:
       - "8090:8090"

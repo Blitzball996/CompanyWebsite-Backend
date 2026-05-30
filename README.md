@@ -53,7 +53,35 @@ window.bzTrack('signup_click', { plan: 'pro' });
 Auto-tracked already: pageviews, scroll depth, time-on-page, GitHub/download/outbound
 clicks, and language-switcher clicks.
 
+## 指标含义 / Metrics explained
+
+| 指标 | 英文 | 含义 |
+|---|---|---|
+| **PV** | Page View | 页面被打开的总次数，刷新一次算一次。 |
+| **UV** | Unique Visitor | 独立访客数。同一人当天多次访问只算 1 个（按 `IP+UA` 的每日加盐哈希去重）。 |
+| **会话 Sessions** | Sessions | 一次连续浏览算一个会话；关闭标签页或长时间无操作后重新访问算新会话。 |
+| **平均停留** | Avg Duration | 每个页面被停留的平均时长。 |
+| **跳出率** | Bounce Rate | 只看了一个页面就离开的会话占比，越低越好。 |
+| **当前在线** | Live | 最近 5 分钟内仍在访问的人数。 |
+
+## 隐私与地理定位 / Privacy & Geolocation
+
+- 后端用离线库 **ip2region** 把 IP 解析到 **国家 / 省 / 市 + 运营商**。这是 IP 定位**可靠的最高精度（市/区县级）**，
+  无法精确到街道门牌——真正到街道只有访客在浏览器手动授权 GPS 才行。
+- `STORE_IP` 环境变量控制是否**存储明文 IP**：
+  - `STORE_IP=true`（默认）：记录真实 IP，面板可见。属于收集个人信息，请确保符合《个人信息保护法》/GDPR 并在隐私政策告知。
+  - `STORE_IP=false`：不存明文 IP（仅地区统计），隐私更安全。
+- 访客 ID 始终是每日轮换的加盐哈希，不可逆推回 IP。
+
+## 博客 / Blog
+
+后端内置双语博客。面板「博客管理」标签可写/改/删文章（中英文双语字段），前端 `blog.html` 通过公开接口 `GET /api/posts` 展示「最新动态」。
+
 ## API
+
+> 新增接口：`/api/stats/regions`（地区）、`/api/stats/visitors`（访客列表+地理）、`/api/stats/journey?id=`（单访客轨迹）、
+> `/api/posts`（公开读博客）、`/api/admin/posts`（Basic Auth 增删改）。
+
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
