@@ -12,6 +12,7 @@ import (
 	"blitzball-analytics/internal/dashboard"
 	"blitzball-analytics/internal/db"
 	"blitzball-analytics/internal/geo"
+	"blitzball-analytics/internal/license"
 	mw "blitzball-analytics/internal/middleware"
 	"blitzball-analytics/internal/stats"
 
@@ -45,6 +46,15 @@ func main() {
 	coll := collect.New(pool, cfg.VisitorSalt, cfg.StoreIP)
 	st := stats.New(pool)
 	bl := blog.New(pool)
+
+	// License signing key (Ed25519). The printed public key goes into the apps.
+	priv, pubB64, err := license.LoadOrCreateKey(cfg.LicenseKeyB64, cfg.LicenseKeyPath)
+	if err != nil {
+		log.Fatalf("license key: %v", err)
+	}
+	lic := license.New(pool, priv)
+	log.Printf("license: Ed25519 ready — embed this PUBLIC KEY in the apps: %s", pubB64)
+
 	dash, err := dashboard.New(cfg.DashboardUser, cfg.DashboardPass, "internal/dashboard/templates")
 	if err != nil {
 		log.Fatalf("dashboard: %v", err)
@@ -65,6 +75,15 @@ func main() {
 		r.Options("/api/collect", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
 		// Public blog read (the website fetches this to render "latest news")
 		r.Get("/api/posts", bl.List)
+	})
+
+	// Public license activation (called by the desktop apps; CORS + rate limit)
+	r.Group(func(r chi.Router) {
+		r.Use(mw.CORS(cfg.AllowedOrigins))
+		r.Use(mw.RateLimit(60, 20)) // tighter: 60/min, burst 20 per IP
+		r.Post("/api/license/activate", lic.Activate)
+		r.Post("/api/license/verify", lic.Verify)
+		r.Get("/api/license/pubkey", lic.PublicKey)
 	})
 
 	// Serve the analytics.js script for the website to include
@@ -94,6 +113,11 @@ func main() {
 		r.Post("/api/admin/posts", bl.Create)
 		r.Put("/api/admin/posts/{id}", bl.Update)
 		r.Delete("/api/admin/posts/{id}", bl.Delete)
+		// License admin (generate / list / revoke / reset device binding)
+		r.Get("/api/admin/licenses", lic.ListAdmin)
+		r.Post("/api/admin/licenses", lic.GenerateAdmin)
+		r.Post("/api/admin/licenses/{key}/revoke", lic.RevokeAdmin)
+		r.Post("/api/admin/licenses/{key}/reset-device", lic.ResetDeviceAdmin)
 	})
 
 	addr := ":" + cfg.Port

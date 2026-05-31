@@ -12,3 +12,7 @@ caddy_data/
 caddy_config/
 CompanyWebsite/
 docs/
+
+# license signing key (NEVER commit)
+internal/license/data/
+*.key

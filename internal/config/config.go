@@ -14,6 +14,8 @@ type Config struct {
 	VisitorSalt    string
 	StoreIP        bool   // 是否存储明文 IP（隐私开关）
 	GeoDBPath      string // ip2region xdb 路径
+	LicenseKeyB64  string // Ed25519 私钥（base64，可空=用文件）
+	LicenseKeyPath string // 私钥文件路径（首次自动生成）
 }
 
 func env(key, def string) string {
@@ -39,5 +41,7 @@ func Load() Config {
 		VisitorSalt:    env("VISITOR_SALT", "please-change-this-random-salt"),
 		StoreIP:        env("STORE_IP", "true") == "true",
 		GeoDBPath:      env("GEO_DB_PATH", "internal/geo/data/ip2region.xdb"),
+		LicenseKeyB64:  env("LICENSE_PRIVATE_KEY", ""),
+		LicenseKeyPath: env("LICENSE_KEY_PATH", "internal/license/data/ed25519.key"),
 	}
 }
