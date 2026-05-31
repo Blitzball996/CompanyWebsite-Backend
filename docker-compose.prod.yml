@@ -41,6 +41,13 @@ services:
       # generated and persisted in the mounted volume below (stable across rebuilds).
       LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY:-}
       LICENSE_KEY_PATH: internal/license/data/ed25519.key
+      # Payments: auto-issue license on payment + email it (all optional)
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       # Persist the license signing key so it survives container rebuilds —
       # otherwise the public key changes and already-activated apps break.
