@@ -48,6 +48,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # Customer accounts: links in verification/reset emails + secure cookies
+      APP_BASE_URL: ${APP_BASE_URL:-https://${SITE_DOMAIN}}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
     volumes:
       # Persist the license signing key so it survives container rebuilds —
       # otherwise the public key changes and already-activated apps break.
