@@ -24,6 +24,8 @@ type Config struct {
 	SMTPFrom       string // 发件人地址
 	AppBaseURL     string // 邮件链接用的站点根 URL（验证/找回）
 	CookieSecure   bool   // 会话 cookie 是否加 Secure（生产 https=true）
+	GeetestID      string // 极验 captcha_id（防爬虫/防机器注册）
+	GeetestKey     string // 极验 captcha_key
 }
 
 func env(key, def string) string {
@@ -59,5 +61,7 @@ func Load() Config {
 		SMTPFrom:       env("SMTP_FROM", ""),
 		AppBaseURL:     env("APP_BASE_URL", ""),
 		CookieSecure:   env("COOKIE_SECURE", "false") == "true",
+		GeetestID:      env("GEETEST_ID", ""),
+		GeetestKey:     env("GEETEST_KEY", ""),
 	}
 }

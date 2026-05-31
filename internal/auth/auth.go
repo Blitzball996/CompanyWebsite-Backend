@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"blitzball-analytics/internal/captcha"
 	"blitzball-analytics/internal/mailer"
 
 	"github.com/jackc/pgx/v5"
@@ -33,12 +34,22 @@ type ctxKey string
 type Handler struct {
 	pool    *pgxpool.Pool
 	mail    *mailer.Mailer
+	cap     *captcha.GeeTest
 	baseURL string // e.g. https://blitzball.lol — used in email links
 	secure  bool   // set Secure cookie flag (true in production/https)
 }
 
-func New(pool *pgxpool.Pool, mail *mailer.Mailer, baseURL string, secure bool) *Handler {
-	return &Handler{pool: pool, mail: mail, baseURL: strings.TrimRight(baseURL, "/"), secure: secure}
+func New(pool *pgxpool.Pool, mail *mailer.Mailer, cap *captcha.GeeTest, baseURL string, secure bool) *Handler {
+	return &Handler{pool: pool, mail: mail, cap: cap, baseURL: strings.TrimRight(baseURL, "/"), secure: secure}
+}
+
+// CaptchaConfig tells the frontend whether to show the GeeTest widget and its id.
+func (h *Handler) CaptchaConfig(w http.ResponseWriter, r *http.Request) {
+	id := ""
+	if h.cap != nil && h.cap.Enabled() {
+		id = h.cap.ID()
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"enabled": id != "", "captcha_id": id})
 }
 
 // User is the authenticated user injected into request context.

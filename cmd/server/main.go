@@ -8,6 +8,7 @@ import (
 
 	"blitzball-analytics/internal/auth"
 	"blitzball-analytics/internal/blog"
+	"blitzball-analytics/internal/captcha"
 	"blitzball-analytics/internal/collect"
 	"blitzball-analytics/internal/config"
 	"blitzball-analytics/internal/dashboard"
@@ -72,7 +73,11 @@ func main() {
 	if appBase == "" && len(cfg.AllowedOrigins) > 0 {
 		appBase = cfg.AllowedOrigins[0]
 	}
-	au := auth.New(pool, mail, appBase, cfg.CookieSecure)
+	cap := captcha.New(cfg.GeetestID, cfg.GeetestKey)
+	if cap.Enabled() {
+		log.Println("captcha: GeeTest enabled on register/login")
+	}
+	au := auth.New(pool, mail, cap, appBase, cfg.CookieSecure)
 
 	dash, err := dashboard.New(cfg.DashboardUser, cfg.DashboardPass, "internal/dashboard/templates")
 	if err != nil {
@@ -116,6 +121,7 @@ func main() {
 		r.Use(mw.RateLimit(30, 10)) // strict: 30/min, burst 10 per IP
 		r.Post("/api/auth/register", au.Register)
 		r.Get("/api/auth/verify", au.Verify)
+		r.Get("/api/auth/captcha-config", au.CaptchaConfig)
 		r.Post("/api/auth/login", au.Login)
 		r.Post("/api/auth/logout", au.Logout)
 		r.Get("/api/auth/me", au.Me)

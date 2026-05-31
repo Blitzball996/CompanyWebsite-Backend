@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"blitzball-analytics/internal/captcha"
 	"blitzball-analytics/internal/middleware"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +16,15 @@ type credReq struct {
 	Password string `json:"password"`
 	Name     string `json:"name"`
 	Token    string `json:"token"`
+	// GeeTest v4 captcha fields (present on register/login when captcha is on)
+	LotNumber     string `json:"lot_number"`
+	CaptchaOutput string `json:"captcha_output"`
+	PassToken     string `json:"pass_token"`
+	GenTime       string `json:"gen_time"`
+}
+
+func (r credReq) captcha() captcha.Params {
+	return captcha.Params{LotNumber: r.LotNumber, CaptchaOutput: r.CaptchaOutput, PassToken: r.PassToken, GenTime: r.GenTime}
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v interface{}) bool {
@@ -29,6 +39,10 @@ func decode(w http.ResponseWriter, r *http.Request, v interface{}) bool {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req credReq
 	if !decode(w, r, &req) {
+		return
+	}
+	if h.cap != nil && !h.cap.Verify(req.captcha()) {
+		fail(w, http.StatusBadRequest, "CAPTCHA_FAILED")
 		return
 	}
 	email := normEmail(req.Email)
@@ -83,6 +97,10 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req credReq
 	if !decode(w, r, &req) {
+		return
+	}
+	if h.cap != nil && !h.cap.Verify(req.captcha()) {
+		fail(w, http.StatusBadRequest, "CAPTCHA_FAILED")
 		return
 	}
 	email := normEmail(req.Email)
