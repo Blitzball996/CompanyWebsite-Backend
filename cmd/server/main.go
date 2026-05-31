@@ -13,8 +13,10 @@ import (
 	"blitzball-analytics/internal/db"
 	"blitzball-analytics/internal/geo"
 	"blitzball-analytics/internal/license"
+	"blitzball-analytics/internal/mailer"
 	mw "blitzball-analytics/internal/middleware"
 	"blitzball-analytics/internal/stats"
+	"blitzball-analytics/internal/webhook"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -55,6 +57,15 @@ func main() {
 	lic := license.New(pool, priv)
 	log.Printf("license: Ed25519 ready — embed this PUBLIC KEY in the apps: %s", pubB64)
 
+	// Mailer + payment webhook (auto-issue license on successful payment).
+	mail := mailer.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+	if mail.Enabled() {
+		log.Println("mailer: SMTP configured")
+	} else {
+		log.Println("mailer: SMTP not configured — keys will be issued but not emailed")
+	}
+	wh := webhook.New(cfg.WebhookSecret, lic, mail)
+
 	dash, err := dashboard.New(cfg.DashboardUser, cfg.DashboardPass, "internal/dashboard/templates")
 	if err != nil {
 		log.Fatalf("dashboard: %v", err)
@@ -66,6 +77,10 @@ func main() {
 
 	// Health
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+
+	// Payment webhook (Airwallex). Signature-verified inside the handler; no auth
+	// middleware so the provider can reach it. Idempotent issue + email.
+	r.Post("/api/webhook/airwallex", wh.Airwallex)
 
 	// Public collect endpoint (CORS + rate limit)
 	r.Group(func(r chi.Router) {

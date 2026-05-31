@@ -1,6 +1,7 @@
 package license
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -273,7 +274,43 @@ func (h *Handler) RevokeAdmin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 
-// ResetDeviceAdmin clears the device binding so the buyer can move to a new machine.
+// IssueForOrder issues exactly one key for a paid order, idempotently: if a key
+// already exists for orderID, it returns that same key (so webhook retries never
+// create duplicates). Returns the key and whether it was newly created.
+func (h *Handler) IssueForOrder(product, orderID, email string) (key string, created bool, err error) {
+	if _, ok := ValidProducts[product]; !ok {
+		return "", false, errExt("unknown product")
+	}
+	ctx := context.Background()
+	if orderID != "" {
+		// already issued for this order?
+		var existing string
+		e := h.pool.QueryRow(ctx, `SELECT key FROM licenses WHERE order_id=$1 LIMIT 1`, orderID).Scan(&existing)
+		if e == nil && existing != "" {
+			return existing, false, nil
+		}
+	}
+	ed := Edition(product)
+	for attempt := 0; attempt < 6; attempt++ {
+		g, gerr := Generate(product)
+		if gerr != nil {
+			return "", false, gerr
+		}
+		_, ierr := h.pool.Exec(ctx,
+			`INSERT INTO licenses (key, product, edition, order_id, email)
+			 VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''))`,
+			g, product, ed, orderID, email)
+		if ierr == nil {
+			return g, true, nil
+		}
+	}
+	return "", false, errExt("could not issue key after retries")
+}
+
+type extErr string
+
+func (e extErr) Error() string { return string(e) }
+func errExt(s string) error    { return extErr(s) }
 func (h *Handler) ResetDeviceAdmin(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	canon, _, code := Parse(key)
