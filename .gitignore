@@ -16,3 +16,4 @@ docs/
 # license signing key (NEVER commit)
 internal/license/data/
 *.key
+license_data/
