@@ -55,6 +55,7 @@
     <button class="tab" data-tab="regions" data-i18n="tab_regions">地区</button>
     <button class="tab" data-tab="visitors" data-i18n="tab_visitors">访客</button>
     <button class="tab" data-tab="blog" data-i18n="tab_blog">博客管理</button>
+    <button class="tab" data-tab="licenses" data-i18n="tab_lic">序列号</button>
   </div>
   <div class="spacer"></div>
   <div class="range" id="range">
@@ -119,6 +120,33 @@
     </div>
     <div class="box full"><h3 data-i18n="blog_list">已有文章</h3><div id="posts"></div></div>
   </section>
+
+  <!-- ===== LICENSES ===== -->
+  <section id="view-licenses" class="hidden">
+    <div class="box full" style="margin-bottom:16px">
+      <h3 data-i18n="lic_gen">签发序列号</h3>
+      <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <label style="font-size:12px;color:var(--dim)" data-i18n="lic_product">产品 / 版本</label>
+          <select id="lic-prod">
+            <option value="BDPR">Blitz DAW · Pro (BDPR)</option>
+            <option value="BDST">Blitz DAW · Standard (BDST)</option>
+            <option value="CCPR">CloseCrab · Pro (CCPR)</option>
+            <option value="CCST">CloseCrab · Standard (CCST)</option>
+          </select>
+        </div>
+        <div style="flex:0 0 90px"><label style="font-size:12px;color:var(--dim)" data-i18n="lic_count">数量</label><input id="lic-count" type="number" value="1" min="1" max="500"></div>
+        <div style="flex:1;min-width:140px"><label style="font-size:12px;color:var(--dim)" data-i18n="lic_order">订单号(可选)</label><input id="lic-order" placeholder="ORDER-..."></div>
+        <div style="flex:1;min-width:160px"><label style="font-size:12px;color:var(--dim)" data-i18n="lic_email">买家邮箱(可选)</label><input id="lic-email" placeholder="buyer@example.com"></div>
+        <button class="btn" id="lic-gen-btn" data-i18n="lic_gen_btn">生成</button>
+      </div>
+      <div id="lic-gen-out" style="margin-top:10px"></div>
+    </div>
+    <div class="box full">
+      <h3 data-i18n="lic_list">已签发序列号</h3>
+      <div id="licenses"></div>
+    </div>
+  </section>
 </main>
 
 <!-- journey modal -->
@@ -142,7 +170,10 @@ var I18N = {
     op:"操作", edit:"编辑", del:"删除", draft:"草稿", published_s:"已发布", none:"暂无数据",
     confirm_del:"确定删除这篇文章？", saved:"已保存", dur:"停留", scroll:"滚动",
     ip_on:"⚠️ 当前已开启「存储明文IP」。访客真实IP会被记录，这属于收集个人信息，请确保你已在隐私政策中告知访客并符合当地法律（如《个人信息保护法》/GDPR）。位置基于离线IP库，可靠精度到「市/区县」级，无法精确到街道。",
-    ip_off:"ℹ️ 当前未存储明文IP（隐私模式）。只显示地区统计，看不到具体某人的IP。如需看IP，把后端 STORE_IP 设为 true。" },
+    ip_off:"ℹ️ 当前未存储明文IP（隐私模式）。只显示地区统计，看不到具体某人的IP。如需看IP，把后端 STORE_IP 设为 true。",
+    tab_lic:"序列号", lic_gen:"签发序列号", lic_product:"产品 / 版本", lic_count:"数量", lic_order:"订单号(可选)", lic_email:"买家邮箱(可选)",
+    lic_gen_btn:"生成", lic_list:"已签发序列号", lic_key:"序列号", lic_prod_col:"产品", lic_bound:"绑定设备", lic_revoke:"封禁", lic_reset:"换机解绑",
+    lic_active:"有效", lic_revoked:"已封禁", lic_unused:"未激活", lic_copied:"已复制", confirm_revoke:"确定封禁这个序列号？(用户将无法激活)", confirm_reset:"清除设备绑定？用户可在新机器上重新激活。" },
   en:{ analytics:"Analytics", tab_overview:"Overview", tab_regions:"Regions", tab_visitors:"Visitors", tab_blog:"Blog",
     d:"d", trend:"Traffic Trend", top_pages:"Top Pages", referrers:"Referrers", devices:"Devices", browsers:"Browsers",
     os:"OS", langs:"Languages", events:"Custom Events", lv_country:"Country", lv_province:"Province", lv_city:"City",
@@ -154,7 +185,10 @@ var I18N = {
     op:"Actions", edit:"Edit", del:"Delete", draft:"Draft", published_s:"Published", none:"No data",
     confirm_del:"Delete this post?", saved:"Saved", dur:"Stay", scroll:"Scroll",
     ip_on:"⚠️ Raw IP storage is ON. Real visitor IPs are recorded — this is personal data; ensure your privacy policy discloses it and you comply with local law (PIPL/GDPR). Location is from an offline IP db, reliable to city level, not street.",
-    ip_off:"ℹ️ Raw IP storage is OFF (privacy mode). Only regional stats are shown. To see IPs, set backend STORE_IP=true." }
+    ip_off:"ℹ️ Raw IP storage is OFF (privacy mode). Only regional stats are shown. To see IPs, set backend STORE_IP=true.",
+    tab_lic:"Licenses", lic_gen:"Issue license keys", lic_product:"Product / edition", lic_count:"Count", lic_order:"Order ID (optional)", lic_email:"Buyer email (optional)",
+    lic_gen_btn:"Generate", lic_list:"Issued license keys", lic_key:"Key", lic_prod_col:"Product", lic_bound:"Bound device", lic_revoke:"Revoke", lic_reset:"Reset device",
+    lic_active:"active", lic_revoked:"revoked", lic_unused:"not activated", lic_copied:"copied", confirm_revoke:"Revoke this key? (user can no longer activate)", confirm_reset:"Clear device binding? User can re-activate on a new machine." }
 };
 var TIP = {
   zh:{ pv:"Page View：页面被打开的总次数，刷新一次算一次。",
@@ -322,9 +356,42 @@ async function savePost(){
   if(res.ok){ resetForm(); loadPosts(); } else { alert('Error: '+res.status); }
 }
 
+/* ===== licenses (serial numbers) ===== */
+async function loadLicenses(){
+  var rows = await get('/api/admin/licenses');
+  var el = $('#licenses');
+  if(!rows || !rows.length){ el.innerHTML='<div style="color:var(--dim)">'+T('none')+'</div>'; return; }
+  el.innerHTML = '<table><thead><tr><th>'+T('lic_key')+'</th><th>'+T('lic_prod_col')+'</th><th>'+T('status')+'</th>'+
+    '<th>'+T('lic_bound')+'</th><th>'+T('time')+'</th><th>'+T('op')+'</th></tr></thead><tbody>'+
+    rows.map(function(x){
+      var st = x.status==='revoked' ? '<span style="color:#f7768e">'+T('lic_revoked')+'</span>'
+        : (x.device_id ? '<span style="color:#3fb950">'+T('lic_active')+'</span>' : '<span style="color:var(--dim)">'+T('lic_unused')+'</span>');
+      var dev = x.device_id ? '<span class="mono" style="font-size:11px">'+esc(x.device_id.slice(0,16))+'…</span>' : '-';
+      return '<tr><td class="mono clickable" data-copy="'+esc(x.key)+'" title="'+T('lic_copied')+'">'+esc(x.key)+'</td>'+
+        '<td>'+esc(x.product)+'</td><td>'+st+'</td><td>'+dev+'</td>'+
+        '<td>'+fmtTime(x.created_at)+'</td>'+
+        '<td><button class="btn ghost" data-reset="'+esc(x.key)+'">'+T('lic_reset')+'</button> '+
+        '<button class="btn danger" data-revoke="'+esc(x.key)+'">'+T('lic_revoke')+'</button></td></tr>';
+    }).join('')+'</tbody></table>';
+  el.querySelectorAll('[data-copy]').forEach(function(b){ b.onclick=function(){ navigator.clipboard&&navigator.clipboard.writeText(b.getAttribute('data-copy')); b.style.color='var(--cyan-bright)'; }; });
+  el.querySelectorAll('[data-revoke]').forEach(function(b){ b.onclick=async function(){ if(!confirm(T('confirm_revoke')))return;
+    await fetch('/api/admin/licenses/'+encodeURIComponent(b.getAttribute('data-revoke'))+'/revoke',{method:'POST',credentials:'same-origin'}); loadLicenses(); }; });
+  el.querySelectorAll('[data-reset]').forEach(function(b){ b.onclick=async function(){ if(!confirm(T('confirm_reset')))return;
+    await fetch('/api/admin/licenses/'+encodeURIComponent(b.getAttribute('data-reset'))+'/reset-device',{method:'POST',credentials:'same-origin'}); loadLicenses(); }; });
+}
+async function genLicenses(){
+  var body={ product:$('#lic-prod').value, count:+$('#lic-count').value||1,
+    order_id:$('#lic-order').value, email:$('#lic-email').value };
+  var res=await fetch('/api/admin/licenses',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(res.ok){ var d=await res.json();
+    $('#lic-gen-out').innerHTML='<div class="note" style="user-select:all">'+(d.keys||[]).map(esc).join('<br>')+'</div>';
+    loadLicenses();
+  } else { alert('Error: '+res.status); }
+}
+
 /* ===== view routing ===== */
 function showView(name){
-  ['overview','regions','visitors','blog'].forEach(function(v){
+  ['overview','regions','visitors','blog','licenses'].forEach(function(v){
     $('#view-'+v).classList.toggle('hidden', v!==name);
   });
   document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===name); });
@@ -332,6 +399,7 @@ function showView(name){
   if(name==='regions') loadRegions();
   if(name==='visitors') loadVisitors();
   if(name==='blog') loadPosts();
+  if(name==='licenses') loadLicenses();
 }
 var currentView = 'overview';
 
@@ -352,6 +420,7 @@ $('#view-regions').querySelectorAll('[data-level]').forEach(function(b){
 $('#lang').onclick = function(){ lang=(lang==='zh'?'en':'zh'); localStorage.setItem('bz_lang',lang); applyI18n(); showView(currentView); };
 $('#b-save').onclick = savePost;
 $('#b-reset').onclick = resetForm;
+$('#lic-gen-btn').onclick = genLicenses;
 
 /* detect storeIP by probing: visitors endpoint returns ip when on */
 get('/api/stats/visitors?days=1').then(function(v){ storeIP = !!(v && v.length && v[0].ip); }).catch(function(){});
