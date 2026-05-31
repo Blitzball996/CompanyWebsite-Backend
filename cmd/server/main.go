@@ -107,6 +107,7 @@ func main() {
 		r.Post("/api/license/activate", lic.Activate)
 		r.Post("/api/license/verify", lic.Verify)
 		r.Get("/api/license/pubkey", lic.PublicKey)
+		r.Get("/api/license/lookup", lic.Lookup)
 	})
 
 	// Public account auth (register/login/etc; CORS + strict rate limit)

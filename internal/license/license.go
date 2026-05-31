@@ -167,6 +167,52 @@ func (h *Handler) PublicKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// maskKey hides the middle groups of a serial, keeping the product prefix and
+// the last group, e.g. CCPR-Q4MN-7P2K-9XW3-HJ5B -> CCPR-••••-••••-••••-HJ5B.
+func maskKey(k string) string {
+	parts := strings.Split(k, "-")
+	if len(parts) != 5 {
+		return "••••"
+	}
+	return parts[0] + "-••••-••••-••••-" + parts[4]
+}
+
+// Lookup returns the (masked) licenses bound to an email so a buyer can check
+// what they own and each key's activation status. Public + rate-limited; keys
+// are masked so the email alone never reveals a usable serial.
+func (h *Handler) Lookup(w http.ResponseWriter, r *http.Request) {
+	email := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("email")))
+	if email == "" || len(email) > 254 || !strings.Contains(email, "@") {
+		fail(w, http.StatusBadRequest, "BAD_EMAIL")
+		return
+	}
+	rows, err := h.pool.Query(r.Context(),
+		`SELECT key, product, edition, status, COALESCE(device_id,''), created_at
+		   FROM licenses WHERE lower(email)=$1 ORDER BY created_at DESC LIMIT 50`, email)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "DB_ERROR")
+		return
+	}
+	defer rows.Close()
+	out := make([]map[string]interface{}, 0, 8)
+	for rows.Next() {
+		var key, product, edition, status, device string
+		var createdAt time.Time
+		if err := rows.Scan(&key, &product, &edition, &status, &device, &createdAt); err != nil {
+			continue
+		}
+		out = append(out, map[string]interface{}{
+			"product":    product,
+			"edition":    edition,
+			"status":     status,
+			"activated":  device != "",
+			"key_masked": maskKey(key),
+			"created_at": createdAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "count": len(out), "licenses": out})
+}
+
 // ---- admin (Basic Auth protected by the router) ----
 
 type genReq struct {
