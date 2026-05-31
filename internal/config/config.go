@@ -22,6 +22,8 @@ type Config struct {
 	SMTPUser       string
 	SMTPPass       string
 	SMTPFrom       string // 发件人地址
+	AppBaseURL     string // 邮件链接用的站点根 URL（验证/找回）
+	CookieSecure   bool   // 会话 cookie 是否加 Secure（生产 https=true）
 }
 
 func env(key, def string) string {
@@ -55,5 +57,7 @@ func Load() Config {
 		SMTPUser:       env("SMTP_USER", ""),
 		SMTPPass:       env("SMTP_PASS", ""),
 		SMTPFrom:       env("SMTP_FROM", ""),
+		AppBaseURL:     env("APP_BASE_URL", ""),
+		CookieSecure:   env("COOKIE_SECURE", "false") == "true",
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"blitzball-analytics/internal/auth"
 	"blitzball-analytics/internal/blog"
 	"blitzball-analytics/internal/collect"
 	"blitzball-analytics/internal/config"
@@ -66,6 +67,13 @@ func main() {
 	}
 	wh := webhook.New(cfg.WebhookSecret, lic, mail)
 
+	// Customer accounts (register/login/sessions + portal).
+	appBase := cfg.AppBaseURL
+	if appBase == "" && len(cfg.AllowedOrigins) > 0 {
+		appBase = cfg.AllowedOrigins[0]
+	}
+	au := auth.New(pool, mail, appBase, cfg.CookieSecure)
+
 	dash, err := dashboard.New(cfg.DashboardUser, cfg.DashboardPass, "internal/dashboard/templates")
 	if err != nil {
 		log.Fatalf("dashboard: %v", err)
@@ -99,6 +107,27 @@ func main() {
 		r.Post("/api/license/activate", lic.Activate)
 		r.Post("/api/license/verify", lic.Verify)
 		r.Get("/api/license/pubkey", lic.PublicKey)
+	})
+
+	// Public account auth (register/login/etc; CORS + strict rate limit)
+	r.Group(func(r chi.Router) {
+		r.Use(mw.CORS(cfg.AllowedOrigins))
+		r.Use(mw.RateLimit(30, 10)) // strict: 30/min, burst 10 per IP
+		r.Post("/api/auth/register", au.Register)
+		r.Get("/api/auth/verify", au.Verify)
+		r.Post("/api/auth/login", au.Login)
+		r.Post("/api/auth/logout", au.Logout)
+		r.Get("/api/auth/me", au.Me)
+		r.Post("/api/auth/forgot", au.Forgot)
+		r.Post("/api/auth/reset", au.Reset)
+	})
+
+	// Logged-in customer portal (session cookie required)
+	r.Group(func(r chi.Router) {
+		r.Use(mw.CORS(cfg.AllowedOrigins))
+		r.Use(au.RequireAuth)
+		r.Get("/api/account/licenses", au.MyLicenses)
+		r.Get("/api/account/receipt/{order_id}", au.Receipt)
 	})
 
 	// Serve the analytics.js script for the website to include

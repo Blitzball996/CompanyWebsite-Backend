@@ -47,6 +47,8 @@ type event struct {
 		Object struct {
 			ID       string                 `json:"id"`
 			Status   string                 `json:"status"`
+			Amount   json.Number            `json:"amount"`
+			Currency string                 `json:"currency"`
 			Metadata map[string]interface{} `json:"metadata"`
 			// some payloads carry the order id / customer email at top level too
 			MerchantOrderID string `json:"merchant_order_id"`
@@ -133,6 +135,12 @@ func (h *Handler) Airwallex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "issue failed", http.StatusInternalServerError)
 		return
 	}
+	// store a receipt (idempotent on order_id) for the customer portal
+	cur := obj.Currency
+	if cur == "" {
+		cur = "CNY"
+	}
+	h.lic.RecordReceipt(orderID, email, product, h.lic.EditionOf(product), obj.Amount.String(), cur, key)
 	if created && email != "" && h.mail.Enabled() {
 		if err := h.mail.Send(email, mailSubject(product), mailBody(product, key), true); err != nil {
 			log.Printf("webhook: key %s issued but email to %s failed: %v", key, email, err)

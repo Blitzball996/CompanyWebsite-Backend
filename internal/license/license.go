@@ -311,6 +311,21 @@ type extErr string
 
 func (e extErr) Error() string { return string(e) }
 func errExt(s string) error    { return extErr(s) }
+
+// EditionOf returns the edition ("standard"/"pro") for a product prefix.
+func (h *Handler) EditionOf(product string) string { return Edition(product) }
+
+// RecordReceipt upserts a receipt row for a paid order (idempotent on order_id).
+func (h *Handler) RecordReceipt(orderID, email, product, edition, amount, currency, key string) {
+	if orderID == "" {
+		return
+	}
+	_, _ = h.pool.Exec(context.Background(), `
+		INSERT INTO receipts (order_id, email, product, edition, amount, currency, license_key)
+		VALUES ($1,NULLIF($2,''),$3,$4,$5,$6,NULLIF($7,''))
+		ON CONFLICT (order_id) DO NOTHING`,
+		orderID, email, product, edition, amount, currency, key)
+}
 func (h *Handler) ResetDeviceAdmin(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	canon, _, code := Parse(key)
