@@ -3,6 +3,16 @@
 {$SITE_DOMAIN} {
 	encode zstd gzip
 
+	# ---- security headers (whole-site hardening) ----
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+
 	# API + dashboard + analytics script + health → Go backend (internal only)
 	@backend path /api/* /analytics.js /dashboard /health
 	handle @backend {
