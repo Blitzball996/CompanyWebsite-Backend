@@ -68,6 +68,11 @@ func RateLimit(perMinute float64, burst float64) func(http.Handler) http.Handler
 }
 
 func clientIP(r *http.Request) string {
+	// Behind Cloudflare the real visitor IP is in CF-Connecting-IP; prefer it so
+	// rate-limiting and geolocation see the real client, not Cloudflare's edge.
+	if cf := r.Header.Get("CF-Connecting-IP"); cf != "" {
+		return cf
+	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		for i := 0; i < len(xff); i++ {
 			if xff[i] == ',' {
