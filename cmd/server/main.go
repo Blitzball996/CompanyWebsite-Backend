@@ -13,11 +13,13 @@ import (
 	"blitzball-analytics/internal/config"
 	"blitzball-analytics/internal/dashboard"
 	"blitzball-analytics/internal/db"
+	"blitzball-analytics/internal/download"
 	"blitzball-analytics/internal/geo"
 	"blitzball-analytics/internal/license"
 	"blitzball-analytics/internal/mailer"
 	mw "blitzball-analytics/internal/middleware"
 	"blitzball-analytics/internal/stats"
+	"blitzball-analytics/internal/team"
 	"blitzball-analytics/internal/webhook"
 
 	"github.com/go-chi/chi/v5"
@@ -59,6 +61,9 @@ func main() {
 	lic := license.New(pool, priv)
 	log.Printf("license: Ed25519 ready — embed this PUBLIC KEY in the apps: %s", pubB64)
 
+	// CloseCrab Team Mode cloud backend (shared leaderboard + presence).
+	tm := team.New(pool)
+
 	// Mailer + payment webhook (auto-issue license on successful payment).
 	mail := mailer.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	if mail.Enabled() {
@@ -67,6 +72,11 @@ func main() {
 		log.Println("mailer: SMTP not configured — keys will be issued but not emailed")
 	}
 	wh := webhook.New(cfg.WebhookSecret, lic, mail)
+
+	// Paid-download gate: validates a license key, then hands out short-lived
+	// signed links. Signed with the license Ed25519 pubkey material as salt so
+	// links can't be forged without server state.
+	dl := download.New(pool, cfg.DownloadSecret)
 
 	// Customer accounts (register/login/sessions + portal).
 	appBase := cfg.AppBaseURL
@@ -95,6 +105,19 @@ func main() {
 	// middleware so the provider can reach it. Idempotent issue + email.
 	r.Post("/api/webhook/airwallex", wh.Airwallex)
 
+	// Creem webhook (Blitz DAW / CloseCrab one-time purchases).
+	r.Post("/api/webhook/creem", wh.Creem)
+
+	// Paid download gate (CORS + rate limit). Claim validates the key the buyer
+	// received by email; File verifies the signed link and redirects.
+	r.Group(func(r chi.Router) {
+		r.Use(mw.CORS(cfg.AllowedOrigins))
+		r.Use(mw.RateLimit(30, 10)) // strict: brute-forcing keys is the threat here
+		r.Post("/api/download/claim", dl.Claim)
+		r.Options("/api/download/claim", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
+		r.Get("/api/download/file", dl.File)
+	})
+
 	// Public collect endpoint (CORS + rate limit)
 	r.Group(func(r chi.Router) {
 		r.Use(mw.CORS(cfg.AllowedOrigins))
@@ -113,6 +136,21 @@ func main() {
 		r.Post("/api/license/verify", lic.Verify)
 		r.Get("/api/license/pubkey", lic.PublicKey)
 		r.Get("/api/license/lookup", lic.Lookup)
+	})
+
+	// CloseCrab Team Mode cloud API. Called server-to-server by CloseCrab-Web,
+	// which authenticates each request with the activated {key, device_id}; the
+	// handler re-validates and derives the team id. CORS + rate limit. Scores
+	// are write-heavy (heartbeats), so a roomier bucket than activation.
+	r.Group(func(r chi.Router) {
+		r.Use(mw.CORS(cfg.AllowedOrigins))
+		r.Use(mw.RateLimit(240, 120)) // 240/min, burst 120 per IP
+		r.Get("/api/team/leaderboard", tm.Leaderboard)
+		r.Get("/api/team/online", tm.Online)
+		r.Post("/api/team/score", tm.Score)
+		r.Post("/api/team/heartbeat", tm.Heartbeat)
+		r.Options("/api/team/score", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
+		r.Options("/api/team/heartbeat", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
 	})
 
 	// Public account auth (register/login/etc; CORS + strict rate limit)
@@ -135,6 +173,7 @@ func main() {
 		r.Use(au.RequireAuth)
 		r.Get("/api/account/licenses", au.MyLicenses)
 		r.Get("/api/account/receipt/{order_id}", au.Receipt)
+		r.Post("/api/account/licenses/{key}/remote-toggle", au.RemoteToggle)
 	})
 
 	// Serve the analytics.js script for the website to include

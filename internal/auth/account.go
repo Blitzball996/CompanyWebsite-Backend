@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
+
+	"blitzball-analytics/internal/license"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -18,7 +21,8 @@ func (h *Handler) MyLicenses(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.pool.Query(r.Context(), `
 		SELECT key, product, edition, status,
-		       COALESCE(device_id,''), activated_at, COALESCE(order_id,''), created_at
+		       COALESCE(device_id,''), activated_at, COALESCE(order_id,''), created_at,
+		       remote_enabled
 		FROM licenses WHERE lower(email)=lower($1)
 		ORDER BY created_at DESC`, u.Email)
 	if err != nil {
@@ -32,12 +36,14 @@ func (h *Handler) MyLicenses(w http.ResponseWriter, r *http.Request) {
 			key, product, edition, status, device, orderID string
 			activatedAt                                     *time.Time
 			createdAt                                       time.Time
+			remoteEnabled                                   bool
 		)
-		rows.Scan(&key, &product, &edition, &status, &device, &activatedAt, &orderID, &createdAt)
+		rows.Scan(&key, &product, &edition, &status, &device, &activatedAt, &orderID, &createdAt, &remoteEnabled)
 		out = append(out, map[string]interface{}{
 			"key": key, "product": product, "edition": edition, "status": status,
 			"activated": device != "", "activated_at": activatedAt,
 			"order_id": orderID, "created_at": createdAt,
+			"remote_enabled": remoteEnabled,
 		})
 	}
 	if out == nil {
@@ -82,6 +88,46 @@ func (h *Handler) Receipt(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(receiptHTML(orderID, email, product, edition, amount, currency, key, createdAt)))
+}
+
+// RemoteToggle flips the remote_enabled switch on one of the user's CloseCrab
+// licenses. With it off, CloseCrab-Web refuses to start a phone-remote session
+// and the cloud Team API rejects that key — a kill-switch the owner controls.
+func (h *Handler) RemoteToggle(w http.ResponseWriter, r *http.Request) {
+	u := userOf(r)
+	if u == nil {
+		fail(w, http.StatusUnauthorized, "NOT_LOGGED_IN")
+		return
+	}
+	canon, product, code := license.Parse(chi.URLParam(r, "key"))
+	if code != "" {
+		fail(w, http.StatusBadRequest, code)
+		return
+	}
+	if !strings.HasPrefix(product, "CC") {
+		fail(w, http.StatusBadRequest, "WRONG_PRODUCT")
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
+		fail(w, http.StatusBadRequest, "BAD_REQUEST")
+		return
+	}
+	// Authorization: the key must belong to the logged-in user's email.
+	ct, err := h.pool.Exec(r.Context(),
+		`UPDATE licenses SET remote_enabled=$2 WHERE key=$1 AND lower(email)=lower($3)`,
+		canon, body.Enabled, u.Email)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "DB_ERROR")
+		return
+	}
+	if ct.RowsAffected() == 0 {
+		fail(w, http.StatusNotFound, "NOT_FOUND")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "remote_enabled": body.Enabled})
 }
 
 func prodName(p string) string {

@@ -137,9 +137,10 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var status string
 	var boundDevice *string
+	var remoteEnabled bool
 	err := h.pool.QueryRow(ctx,
-		`SELECT status, device_id FROM licenses WHERE key=$1`, canon,
-	).Scan(&status, &boundDevice)
+		`SELECT status, device_id, remote_enabled FROM licenses WHERE key=$1`, canon,
+	).Scan(&status, &boundDevice, &remoteEnabled)
 	if err == pgx.ErrNoRows {
 		fail(w, http.StatusNotFound, "NOT_FOUND")
 		return
@@ -156,7 +157,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = h.pool.Exec(ctx, `UPDATE licenses SET last_seen_at=now() WHERE key=$1`, canon)
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "error": "OK"})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "error": "OK", "remote_enabled": remoteEnabled})
 }
 
 // PublicKey exposes the Ed25519 verify key (base64) — embed it in the apps.

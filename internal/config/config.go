@@ -17,6 +17,7 @@ type Config struct {
 	LicenseKeyB64  string // Ed25519 私钥（base64，可空=用文件）
 	LicenseKeyPath string // 私钥文件路径（首次自动生成）
 	WebhookSecret  string // 支付平台 webhook 签名密钥
+	DownloadSecret string // 付费下载链接 HMAC 签名密钥
 	SMTPHost       string // 邮件服务器（发序列号用）
 	SMTPPort       string
 	SMTPUser       string
@@ -54,6 +55,7 @@ func Load() Config {
 		LicenseKeyB64:  env("LICENSE_PRIVATE_KEY", ""),
 		LicenseKeyPath: env("LICENSE_KEY_PATH", "internal/license/data/ed25519.key"),
 		WebhookSecret:  env("WEBHOOK_SECRET", ""),
+		DownloadSecret: env("DOWNLOAD_SECRET", env("WEBHOOK_SECRET", "change-me-download-secret")),
 		SMTPHost:       env("SMTP_HOST", ""),
 		SMTPPort:       env("SMTP_PORT", "587"),
 		SMTPUser:       env("SMTP_USER", ""),
