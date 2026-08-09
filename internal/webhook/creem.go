@@ -53,6 +53,8 @@ func creemProductMap() map[string]string {
 	m := map[string]string{
 		// Blitz DAW — $150 lifetime (default, override via env).
 		"prod_7MP9FYacUK2RwtfD1LI3oe": "BDPR",
+		// CloseCrab Pro — $29.99 lifetime (default, override via env).
+		"prod_52UST52fNxBYDbP1fqrBCJ": "CCPR",
 	}
 	for _, pair := range strings.Split(os.Getenv("CREEM_PRODUCT_MAP"), ",") {
 		pair = strings.TrimSpace(pair)
