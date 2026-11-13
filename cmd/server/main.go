@@ -15,6 +15,7 @@ import (
 	"blitzball-analytics/internal/db"
 	"blitzball-analytics/internal/download"
 	"blitzball-analytics/internal/geo"
+	"blitzball-analytics/internal/im"
 	"blitzball-analytics/internal/license"
 	"blitzball-analytics/internal/mailer"
 	mw "blitzball-analytics/internal/middleware"
@@ -88,6 +89,7 @@ func main() {
 		log.Println("captcha: GeeTest enabled on register/login")
 	}
 	au := auth.New(pool, mail, cap, appBase, cfg.CookieSecure)
+	imm := im.New(pool, au)
 
 	dash, err := dashboard.New(cfg.DashboardUser, cfg.DashboardPass, "internal/dashboard/templates")
 	if err != nil {
@@ -116,6 +118,16 @@ func main() {
 		r.Post("/api/download/claim", dl.Claim)
 		r.Options("/api/download/claim", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })
 		r.Get("/api/download/file", dl.File)
+	})
+
+	// Authenticated IM foundation: conversations, cursor replay, idempotent messages and friends.
+	r.Group(func(r chi.Router) {
+		r.Use(mw.CORS(cfg.AllowedOrigins))
+		r.Use(au.RequireAuth)
+		r.Get("/api/im/conversations", imm.Conversations)
+		r.Get("/api/im/conversations/{id}/messages", imm.Messages)
+		r.Post("/api/im/conversations/{id}/messages", imm.Send)
+		r.Get("/api/im/friends", imm.Friends)
 	})
 
 	// Public collect endpoint (CORS + rate limit)

@@ -21,11 +21,11 @@ import (
 )
 
 const (
-	cookieName    = "bb_session"
-	sessionTTL    = 30 * 24 * time.Hour // 30 days
-	resetTTL      = time.Hour
-	bcryptCost    = 12
-	ctxUserKey    = ctxKey("user")
+	cookieName = "bb_session"
+	sessionTTL = 30 * 24 * time.Hour // 30 days
+	resetTTL   = time.Hour
+	bcryptCost = 12
+	ctxUserKey = ctxKey("user")
 )
 
 type ctxKey string
@@ -120,6 +120,10 @@ func (h *Handler) userFromRequest(r *http.Request) *User {
 	}
 	return &u
 }
+
+// UserFromRequest exposes the authenticated identity to first-party modules
+// such as IM without exposing session cookies or database details.
+func (h *Handler) UserFromRequest(r *http.Request) *User { return h.userFromRequest(r) }
 
 // RequireAuth is middleware that 401s unless a valid session is present.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
