@@ -2,21 +2,21 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
-	"net/http"
 	"log"
+	"net/http"
 )
 
 func jsonDecode(r *http.Request, v interface{}) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(v)
 }
 
-// sendVerify emails an account-verification link (or logs it if SMTP is off).
-func (h *Handler) sendVerify(email, tok string) {
+// sendVerify reports delivery failures without exposing verification tokens.
+func (h *Handler) sendVerify(email, tok string) error {
 	link := h.baseURL + "/api/auth/verify?token=" + tok
 	if !h.mail.Enabled() {
-		log.Printf("auth: (no SMTP) verify link for %s: %s", email, link)
-		return
+		return errors.New("verification mail is not configured")
 	}
 	body := `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto">
   <h2 style="color:#6d28d9">验证你的邮箱 / Verify your email</h2>
@@ -25,14 +25,16 @@ func (h *Handler) sendVerify(email, tok string) {
   <p style="color:#888;font-size:12px">若按钮无效，复制此链接：<br>` + link + `</p></div>`
 	if err := h.mail.Send(email, "验证你的邮箱 / Verify your email — Blitzball Labs", body, true); err != nil {
 		log.Printf("auth: verify email to %s failed: %v", email, err)
+		return err
 	}
+	return nil
 }
 
 // sendReset emails a password-reset link.
 func (h *Handler) sendReset(email, tok string) {
 	link := h.baseURL + "/reset.html?token=" + tok
 	if !h.mail.Enabled() {
-		log.Printf("auth: (no SMTP) reset link for %s: %s", email, link)
+		log.Printf("auth: password reset mail unavailable: SMTP not configured")
 		return
 	}
 	body := `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto">

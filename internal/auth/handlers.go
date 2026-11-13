@@ -54,6 +54,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "WEAK_PASSWORD")
 		return
 	}
+	if !h.mail.Enabled() {
+		fail(w, http.StatusServiceUnavailable, "EMAIL_UNAVAILABLE")
+		return
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "HASH_ERROR")
@@ -65,11 +69,25 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO users (email, pass_hash, name, verify_token) VALUES ($1,$2,$3,$4)`,
 		email, string(hash), req.Name, vtok)
 	if err != nil {
-		// unique violation → email already registered
+		// Allow the same owner to retry delivery after a failed registration mail.
+		var existingHash, existingToken string
+		var verified bool
+		lookupErr := h.pool.QueryRow(ctx, `SELECT pass_hash, email_verified, COALESCE(verify_token,'') FROM users WHERE email=$1`, email).Scan(&existingHash, &verified, &existingToken)
+		if lookupErr == nil && !verified && existingToken != "" && bcrypt.CompareHashAndPassword([]byte(existingHash), []byte(req.Password)) == nil {
+			if err := h.sendVerify(email, existingToken); err != nil {
+				fail(w, http.StatusBadGateway, "VERIFICATION_EMAIL_FAILED")
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+			return
+		}
 		fail(w, http.StatusConflict, "EMAIL_TAKEN")
 		return
 	}
-	h.sendVerify(email, vtok)
+	if err := h.sendVerify(email, vtok); err != nil {
+		fail(w, http.StatusBadGateway, "VERIFICATION_EMAIL_FAILED")
+		return
+	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true})
 }
 

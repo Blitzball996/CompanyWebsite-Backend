@@ -63,29 +63,40 @@ func (m *Mailer) Send(to, subject, body string, html bool) error {
 		return m.sendImplicitTLS(addr, auth, to, []byte(msg))
 	}
 	// STARTTLS path (587/25)
-	c, err := smtp.Dial(addr)
+	conn, err := net.DialTimeout("tcp", addr, 15*time.Second)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		return err
+	}
+	c, err := smtp.NewClient(conn, m.host)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		if err := c.StartTLS(&tls.Config{ServerName: m.host}); err != nil {
-			return err
-		}
+	if ok, _ := c.Extension("STARTTLS"); !ok {
+		return errors.New("mailer: SMTP server does not support STARTTLS")
+	}
+	if err := c.StartTLS(&tls.Config{ServerName: m.host}); err != nil {
+		return err
 	}
 	if auth != nil {
-		if ok, _ := c.Extension("AUTH"); ok {
-			if err := c.Auth(auth); err != nil {
-				return err
-			}
+		if err := c.Auth(auth); err != nil {
+			return err
 		}
 	}
 	return finish(c, m.from, to, []byte(msg))
 }
 
 func (m *Mailer) sendImplicitTLS(addr string, auth smtp.Auth, to string, msg []byte) error {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: m.host})
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 15 * time.Second}, "tcp", addr, &tls.Config{ServerName: m.host})
 	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		return err
 	}
 	c, err := smtp.NewClient(conn, m.host)
