@@ -371,3 +371,47 @@ func (h *Handler) Grants(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 200, out)
 }
+
+func (h *Handler) Feed(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	rows, err := h.pool.Query(r.Context(), `SELECT p.id,p.author_id,p.body,p.audience,p.created_at FROM im_posts p WHERE p.deleted_at IS NULL AND (p.audience='public' OR p.author_id=$1 OR (p.audience='friends' AND EXISTS(SELECT 1 FROM im_friendships f WHERE f.state='accepted' AND ((f.requester_id=$1 AND f.addressee_id=p.author_id) OR (f.addressee_id=$1 AND f.requester_id=p.author_id)))) ORDER BY p.created_at DESC LIMIT 50`, u.ID)
+	if err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id string
+		var author int64
+		var body, audience string
+		var created any
+		if rows.Scan(&id, &author, &body, &audience, &created) == nil {
+			out = append(out, map[string]any{"id": id, "authorId": author, "body": body, "audience": audience, "createdAt": created})
+		}
+	}
+	write(w, 200, out)
+}
+func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	var q struct {
+		Body     string `json:"body"`
+		Audience string `json:"audience"`
+	}
+	if json.NewDecoder(r.Body).Decode(&q) != nil || strings.TrimSpace(q.Body) == "" || (q.Audience != "private" && q.Audience != "friends" && q.Audience != "public") {
+		write(w, 400, map[string]string{"error": "BAD_POST"})
+		return
+	}
+	var id string
+	if err := h.pool.QueryRow(r.Context(), `INSERT INTO im_posts(id,author_id,body,audience) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING id`, u.ID, q.Body, q.Audience).Scan(&id); err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	write(w, 201, map[string]any{"id": id, "body": q.Body, "audience": q.Audience})
+}

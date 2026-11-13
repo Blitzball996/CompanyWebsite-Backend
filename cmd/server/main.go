@@ -135,6 +135,8 @@ func main() {
 		r.Get("/api/im/conversations/{id}/agent-grants", imm.Grants)
 		r.Post("/api/im/conversations/{id}/agent-grants", imm.GrantAgent)
 		r.Post("/api/im/agent-grants/{id}/revoke", imm.RevokeAgent)
+		r.Get("/api/im/feed", imm.Feed)
+		r.Post("/api/im/posts", imm.CreatePost)
 	})
 
 	// Public collect endpoint (CORS + rate limit)
