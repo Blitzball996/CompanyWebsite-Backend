@@ -131,6 +131,9 @@ func main() {
 		r.Post("/api/im/friends/request", imm.FriendRequest)
 		r.Post("/api/im/friends/respond", imm.FriendRespond)
 		r.Post("/api/im/conversations", imm.CreateConversation)
+		r.Get("/api/im/conversations/{id}/agent-grants", imm.Grants)
+		r.Post("/api/im/conversations/{id}/agent-grants", imm.GrantAgent)
+		r.Post("/api/im/agent-grants/{id}/revoke", imm.RevokeAgent)
 	})
 
 	// Public collect endpoint (CORS + rate limit)

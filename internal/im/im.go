@@ -244,3 +244,76 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 201, map[string]any{"id": id, "kind": q.Kind, "title": q.Title})
 }
+
+func (h *Handler) GrantAgent(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	cid := r.PathValue("id")
+	var member bool
+	_ = h.pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM im_members WHERE conversation_id=$1 AND user_id=$2)`, cid, u.ID).Scan(&member)
+	if !member {
+		write(w, 403, map[string]string{"error": "FORBIDDEN"})
+		return
+	}
+	var q struct {
+		Scopes         []string `json:"scopes"`
+		ExpiresMinutes int      `json:"expiresMinutes"`
+	}
+	if json.NewDecoder(r.Body).Decode(&q) != nil || len(q.Scopes) == 0 {
+		write(w, 400, map[string]string{"error": "BAD_SCOPES"})
+		return
+	}
+	if q.ExpiresMinutes <= 0 || q.ExpiresMinutes > 10080 {
+		q.ExpiresMinutes = 60
+	}
+	var id string
+	err := h.pool.QueryRow(r.Context(), `INSERT INTO im_agent_grants(id,conversation_id,granted_by,scopes,expires_at) VALUES(gen_random_uuid(),$1,$2,$3::jsonb,now()+($4||' minutes')::interval) RETURNING id`, cid, u.ID, mustJSON(q.Scopes), q.ExpiresMinutes).Scan(&id)
+	if err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	write(w, 201, map[string]any{"id": id, "conversationId": cid, "scopes": q.Scopes, "expiresMinutes": q.ExpiresMinutes})
+}
+func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
+func (h *Handler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	id := r.PathValue("id")
+	ct, err := h.pool.Exec(r.Context(), `UPDATE im_agent_grants SET revoked_at=now() WHERE id=$1 AND granted_by=$2 AND revoked_at IS NULL`, id, u.ID)
+	if err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	if ct.RowsAffected() == 0 {
+		write(w, 404, map[string]string{"error": "GRANT_NOT_FOUND"})
+		return
+	}
+	write(w, 200, map[string]any{"ok": true})
+}
+func (h *Handler) Grants(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	cid := r.PathValue("id")
+	rows, err := h.pool.Query(r.Context(), `SELECT id,scopes,expires_at,revoked_at FROM im_agent_grants WHERE conversation_id=$1 AND granted_by=$2 ORDER BY created_at DESC`, cid, u.ID)
+	if err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id string
+		var scopes any
+		var expires, revoked any
+		if rows.Scan(&id, &scopes, &expires, &revoked) == nil {
+			out = append(out, map[string]any{"id": id, "scopes": scopes, "expiresAt": expires, "revokedAt": revoked})
+		}
+	}
+	write(w, 200, out)
+}
