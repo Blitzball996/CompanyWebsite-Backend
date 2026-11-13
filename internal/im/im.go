@@ -8,7 +8,61 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// Stream provides a dependency-free realtime transport for clients that cannot
+// open WebSocket connections. It uses the same cursor contract as pagination:
+// reconnecting with ?after=N never duplicates messages.
+func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	cid := r.PathValue("id")
+	var member bool
+	_ = h.pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM im_members WHERE conversation_id=$1 AND user_id=$2)`, cid, u.ID).Scan(&member)
+	if !member {
+		write(w, http.StatusForbidden, map[string]string{"error": "FORBIDDEN"})
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		write(w, http.StatusNotImplemented, map[string]string{"error": "STREAM_UNSUPPORTED"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	ticker := time.NewTicker(750 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		rows, err := h.pool.Query(r.Context(), `SELECT cursor,id,sender_id,kind,body,created_at FROM im_messages WHERE conversation_id=$1 AND cursor>$2 AND deleted_at IS NULL ORDER BY cursor LIMIT 100`, cid, after)
+		if err != nil {
+			return
+		}
+		for rows.Next() {
+			var cursor int64
+			var id string
+			var sender int64
+			var kind, body string
+			var created any
+			if rows.Scan(&cursor, &id, &sender, &kind, &body, &created) == nil {
+				payload, _ := json.Marshal(map[string]any{"cursor": cursor, "id": id, "senderId": sender, "kind": kind, "body": body, "createdAt": created})
+				_, _ = w.Write([]byte("id: " + strconv.FormatInt(cursor, 10) + "\ndata: " + string(payload) + "\n\n"))
+				after = cursor
+			}
+		}
+		rows.Close()
+		flusher.Flush()
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
 
 type Handler struct {
 	pool  *pgxpool.Pool

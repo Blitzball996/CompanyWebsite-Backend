@@ -126,6 +126,7 @@ func main() {
 		r.Use(au.RequireAuth)
 		r.Get("/api/im/conversations", imm.Conversations)
 		r.Get("/api/im/conversations/{id}/messages", imm.Messages)
+		r.Get("/api/im/conversations/{id}/stream", imm.Stream)
 		r.Post("/api/im/conversations/{id}/messages", imm.Send)
 		r.Get("/api/im/friends", imm.Friends)
 		r.Post("/api/im/friends/request", imm.FriendRequest)
