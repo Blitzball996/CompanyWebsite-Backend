@@ -128,6 +128,9 @@ func main() {
 		r.Get("/api/im/conversations/{id}/messages", imm.Messages)
 		r.Post("/api/im/conversations/{id}/messages", imm.Send)
 		r.Get("/api/im/friends", imm.Friends)
+		r.Post("/api/im/friends/request", imm.FriendRequest)
+		r.Post("/api/im/friends/respond", imm.FriendRespond)
+		r.Post("/api/im/conversations", imm.CreateConversation)
 	})
 
 	// Public collect endpoint (CORS + rate limit)

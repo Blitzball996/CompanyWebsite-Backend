@@ -161,3 +161,86 @@ func (h *Handler) Friends(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 200, out)
 }
+
+type relationRequest struct {
+	UserID int64 `json:"userId"`
+}
+
+func (h *Handler) FriendRequest(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	var q relationRequest
+	if json.NewDecoder(r.Body).Decode(&q) != nil || q.UserID <= 0 || q.UserID == u.ID {
+		write(w, 400, map[string]string{"error": "BAD_USER"})
+		return
+	}
+	_, err := h.pool.Exec(r.Context(), `INSERT INTO im_friendships(requester_id,addressee_id,state) VALUES($1,$2,'pending') ON CONFLICT(requester_id,addressee_id) DO UPDATE SET state='pending',updated_at=now()`, u.ID, q.UserID)
+	if err != nil {
+		write(w, 409, map[string]string{"error": "RELATION_CONFLICT"})
+		return
+	}
+	write(w, 201, map[string]any{"ok": true, "state": "pending"})
+}
+func (h *Handler) FriendRespond(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	var q struct {
+		UserID int64  `json:"userId"`
+		State  string `json:"state"`
+	}
+	if json.NewDecoder(r.Body).Decode(&q) != nil || q.UserID <= 0 || (q.State != "accepted" && q.State != "rejected" && q.State != "blocked") {
+		write(w, 400, map[string]string{"error": "BAD_RELATION"})
+		return
+	}
+	var command string
+	if q.State == "blocked" {
+		command = `UPDATE im_friendships SET state='blocked',updated_at=now() WHERE requester_id=$1 AND addressee_id=$2`
+	} else {
+		command = `UPDATE im_friendships SET state=$3,updated_at=now() WHERE requester_id=$1 AND addressee_id=$2 AND state='pending'`
+	}
+	var err error
+	if q.State == "blocked" {
+		_, err = h.pool.Exec(r.Context(), command, u.ID, q.UserID)
+	} else {
+		_, err = h.pool.Exec(r.Context(), command, q.UserID, u.ID, q.State)
+	}
+	if err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	write(w, 200, map[string]any{"ok": true, "state": q.State})
+}
+func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
+	u := h.user(w, r)
+	if u == nil {
+		return
+	}
+	var q struct {
+		Kind    string  `json:"kind"`
+		Title   string  `json:"title"`
+		Members []int64 `json:"members"`
+	}
+	if json.NewDecoder(r.Body).Decode(&q) != nil || (q.Kind != "direct" && q.Kind != "group") {
+		write(w, 400, map[string]string{"error": "BAD_CONVERSATION"})
+		return
+	}
+	var id string
+	if err := h.pool.QueryRow(r.Context(), `INSERT INTO im_conversations(id,kind,title,created_by) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING id`, q.Kind, q.Title, u.ID).Scan(&id); err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	if _, err := h.pool.Exec(r.Context(), `INSERT INTO im_members(conversation_id,user_id,role) VALUES($1,$2,'owner')`, id, u.ID); err != nil {
+		write(w, 500, map[string]string{"error": "DB_ERROR"})
+		return
+	}
+	for _, member := range q.Members {
+		if member > 0 && member != u.ID {
+			_, _ = h.pool.Exec(r.Context(), `INSERT INTO im_members(conversation_id,user_id) SELECT $1,$2 WHERE EXISTS(SELECT 1 FROM im_friendships WHERE ((requester_id=$3 AND addressee_id=$2) OR (requester_id=$2 AND addressee_id=$3)) AND state='accepted' ) ON CONFLICT DO NOTHING`, id, member, u.ID)
+		}
+	}
+	write(w, 201, map[string]any{"id": id, "kind": q.Kind, "title": q.Title})
+}
